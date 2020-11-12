@@ -62,6 +62,10 @@ def test(arglist):
         train_step = 0
         t_start = time.time()
 
+        episode_obs = np.zeros(0)
+
+        batch_size = 32
+
         print('Starting iterations...')
         while True:
             # get action
@@ -71,20 +75,32 @@ def test(arglist):
             o = np.asarray(obs_n)
             o = np.reshape(o, [1, 54])
 
+            a = None
+
             successor_states = []
-            for a in range(5):
-                obs = np.concatenate((o, [1, a]), axis=1)
-                obs = np.reshape(obs, [1, 1, 55])
-                successor_states.append(state_predictor.predict_on_batch(obs))  # Comes out as (1, 54)
+            if len(episode_obs) > 1:
+                prev_obs = episode_obs[-2:]
+                print(prev_obs.shape)
+                for a in range(5):
+                    obs = np.concatenate((o, [1, a]), axis=1)
+                    obs = np.reshape(obs, [1, 1, 55])
 
-            values = []
-            for s in successor_states:
-                value = value_predictor.value(s, sess)
-                values.append(value)
+                    obs = np.concatenate((prev_obs, obs), axis=1)
 
-            values = np.asarray(values)
-            values = np.reshape(values, len(successor_states))
-            a = np.argmax(values, axis=0)
+                    print(obs.shape) #Should be [1, 3, 55]
+
+                    successor_states.append(state_predictor.predict_on_batch(obs))  # Comes out as (1, 54)
+
+
+
+                values = []
+                for s in successor_states:
+                    value = value_predictor.value(s, sess)
+                    values.append(value)
+
+                values = np.asarray(values)
+                values = np.reshape(values, len(successor_states))
+                a = np.argmax(values, axis=0)
 
 
 
@@ -104,11 +120,18 @@ def test(arglist):
             In training, probably 100%
             """
 
-            a_n[0] = a
+            if a is not None:
+                a_n[0] = a
+
+
+
+            episode_obs = np.append(episode_obs, np.reshape(np.concatenate((o, [1, a_n[0]], [1, 1, 55]), axis=1)), axis=0)
 
 
             #new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             new_obs_n, rew_n, done_n, info_n = env.step(a_n)
+
+
             episode_step += 1
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
@@ -129,6 +152,8 @@ def test(arglist):
                 agent_rewards[i][-1] += rew
 
             if done or terminal:
+                episode_obs = np.zeros(0)
+                value_predictor.update_target_model()
                 obs_n = env.reset()
                 episode_step = 0
                 episode_rewards.append(0)
@@ -138,6 +163,10 @@ def test(arglist):
 
             # increment global step counter
             train_step += 1
+
+
+            if train_step > batch_size and train_step % 100 == 0:
+                value_predictor.replay(batch_size)
 
             # for benchmarking learned policies
             if arglist.benchmark:
@@ -225,6 +254,9 @@ def test(arglist):
 
         sess.close()
 
+
+
+
 def maddpg_test():
     arglist = parse_args()
     test(arglist)
@@ -232,7 +264,7 @@ def maddpg_test():
 
 def load_lstm_model(fpath):
     model = Sequential()
-    model.add(LSTM(128, input_shape=(1, 55), return_sequences=True))
+    model.add(LSTM(128, input_shape=(3, 55), return_sequences=True))
     model.add(LSTM(64))
     model.add(Dense(54))
     model.compile(loss='mse', optimizer='adam', metrics=['mae'])

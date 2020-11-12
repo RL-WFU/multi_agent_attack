@@ -65,7 +65,7 @@ class StateValue:
         self.scope = scope
         self.model = DQN(state_size, scope + "_model", session)
         self.target_model = DQN(state_size, scope + "_target", session)
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=20000)
         self.gamma = 0.95  # discount rate
         self.epsilon = 0.01  # exploration rate
         self.epsilon_min = 0.01
