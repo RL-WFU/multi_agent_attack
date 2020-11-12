@@ -41,6 +41,13 @@ def parse_args():
                         help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/",
                         help="directory where plot data is saved")
+
+    parser.add_argument("--att-benchmark-dir", type=str, default="Attack/benchmark_files/",
+                        help="directory where benchmark data is saved")
+    parser.add_argument("--att-plots-dir", type=str, default="Attack/learning_curves/",
+                        help="directory where plot data is saved")
+
+
     return parser.parse_args()
 
 

@@ -15,6 +15,7 @@ def test(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
+        baseline_env = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
         num_adversaries = min(env.n, arglist.num_adversaries)
@@ -38,6 +39,12 @@ def test(arglist):
         print('Loading previous state...')
         U.load_state(arglist.load_dir+ "policy")
 
+
+        baseline_episode_rewards = [0.0]
+        baseline_agent_rewards = [[0.0] for _ in range(env.n)]
+        baseline_final_ep_rewards = []
+        baseline_final_ep_ag_rewards = []
+
         episode_rewards = [0.0]  # sum of rewards for all agents
         agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
         final_ep_rewards = []  # sum of rewards for training curve
@@ -53,11 +60,21 @@ def test(arglist):
         final_dist = []
         final_obs_cov = []
 
+        baseline_t_collisions = []
+        baseline_collisions = []
+        baseline_min_dist = []
+        baseline_obs_covered = []
+
+        baseline_final_collisions = []
+        baseline_final_dist = []
+        baseline_final_obs_cov = []
+
 
         transition = []
 
 
         obs_n = env.reset()
+        baseline_obs_n = baseline_env.reset()
         episode_step = 0
         train_step = 0
         t_start = time.time()
@@ -70,6 +87,7 @@ def test(arglist):
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+            baseline_action_n = [agent.action(obs) for agent, obs in zip(trainers,baseline_obs_n)]
             # environment step
 
             o = np.asarray(obs_n)
@@ -107,10 +125,12 @@ def test(arglist):
 
 
             a_n = []
+            baseline_a_n = []
+
 
             for i in range(len(trainers)):
                 a_n.append(np.random.choice(np.arange(len(action_n[0])), p=action_n[i]))
-
+                baseline_a_n.append(np.random.choice(np.arange(len(action_n[0])), p=baseline_action_n[i]))
 
             if a_n[0] == a:
                 print("Took same action")
@@ -131,9 +151,12 @@ def test(arglist):
             #new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             new_obs_n, rew_n, done_n, info_n = env.step(a_n)
 
+            baseline_new_obs_n, baseline_rew_n, baseline_done_n, baseline_info_n = baseline_env.step(baseline_a_n)
+
 
             episode_step += 1
             done = all(done_n)
+            baseline_done = all(baseline_done_n)
             terminal = (episode_step >= arglist.max_episode_len)
             # collect experience
 
@@ -146,17 +169,25 @@ def test(arglist):
             transition.append((o, a_n[0], a_n[1], a_n[2], o_next))
 
             obs_n = new_obs_n
+            baseline_obs_n = baseline_new_obs_n
 
             for i, rew in enumerate(rew_n):
                 episode_rewards[-1] += rew
                 agent_rewards[i][-1] += rew
 
+                baseline_episode_rewards[-1] += baseline_rew_n[i]
+                baseline_agent_rewards[i][-1] += baseline_rew_n[i]
+
             if done or terminal:
                 episode_obs = np.zeros(0)
                 value_predictor.update_target_model()
                 obs_n = env.reset()
+                baseline_obs_n = baseline_env.reset()
                 episode_step = 0
                 episode_rewards.append(0)
+                baseline_episode_rewards.append(0)
+                for a in baseline_agent_rewards:
+                    a.append(0)
                 for a in agent_rewards:
                     a.append(0)
                 agent_info.append([[]])
@@ -171,14 +202,19 @@ def test(arglist):
             # for benchmarking learned policies
             if arglist.benchmark:
                 collisions.append(max([info_n['n'][0][1], info_n['n'][1][1], info_n['n'][2][1]]) - 1)
+                baseline_collisions.append(max([baseline_info_n['n'][0][1], baseline_info_n['n'][1][1], baseline_info_n['n'][2][1]]) - 1)
 
                 if train_step > arglist.benchmark_iters and (done or terminal):
-                    os.makedirs(os.path.dirname(arglist.benchmark_dir), exist_ok=True)
+                    os.makedirs(os.path.dirname(arglist.att_benchmark_dir), exist_ok=True)
                     min_dist.append(min([info_n['n'][0][2], info_n['n'][1][2], info_n['n'][1][2]]))
                     obs_covered.append(info_n['n'][0][3])
                     t_collisions.append(sum(collisions))
                     collisions = []
 
+                    baseline_min_dist.append(min([baseline_info_n['n'][0][2], baseline_info_n['n'][1][2], baseline_info_n['n'][1][2]]))
+                    baseline_obs_covered.append(baseline_info_n['n'][0][3])
+                    baseline_t_collisions.append(sum(baseline_collisions))
+                    baseline_collisions = []
 
 
             # for displaying learned policies
@@ -191,10 +227,12 @@ def test(arglist):
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
 
 
+                value_predictor.save("_model", "_target")
+
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:
-                    print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-                        train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
+                    print("steps: {}, episodes: {}, mean episode reward: {}, difference in reward: {}, time: {}".format(
+                        train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), np.mean(episode_rewards[-arglist.save_rate:]) - np.mean(baseline_episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
                 else:
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
@@ -202,39 +240,63 @@ def test(arglist):
                 t_start = time.time()
                 # Keep track of final episode reward
                 final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
+                baseline_final_ep_rewards.append(np.mean(baseline_episode_rewards[-arglist.save_rate:]))
                 for rew in agent_rewards:
                     final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
+
+                for rew in baseline_agent_rewards:
+                    baseline_final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
 
                 final_collisions.append(np.mean(t_collisions[-arglist.save_rate:]))
                 final_dist.append(np.mean(min_dist[-arglist.save_rate:]))
                 final_obs_cov.append(np.mean(obs_covered[-arglist.save_rate:]))
 
+                baseline_final_collisions.append(np.mean(baseline_t_collisions[-arglist.save_rate:]))
+                baseline_final_dist.append(np.mean(baseline_min_dist[-arglist.save_rate:]))
+                baseline_final_obs_cov.append(np.mean(baseline_obs_covered[-arglist.save_rate:]))
 
 
-                os.makedirs(os.path.dirname(arglist.plots_dir), exist_ok=True)
+                os.makedirs(os.path.dirname(arglist.att_plots_dir), exist_ok=True)
                 plt.plot(final_ep_rewards)
-                plt.savefig(arglist.plots_dir + arglist.exp_name + '_rewards.png')
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_rewards.png')
                 plt.clf()
 
                 plt.plot(final_dist)
-                plt.savefig(arglist.plots_dir + arglist.exp_name + '_min_dist.png')
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_min_dist.png')
                 plt.clf()
 
                 plt.plot(final_obs_cov)
-                plt.savefig(arglist.plots_dir + arglist.exp_name + '_obstacles_covered.png')
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_obstacles_covered.png')
                 plt.clf()
 
                 plt.plot(final_collisions)
-                plt.savefig(arglist.plots_dir + arglist.exp_name + '_total_collisions.png')
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_total_collisions.png')
                 plt.clf()
+
+                plt.plot(baseline_final_ep_rewards)
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_rewards.png')
+                plt.clf()
+
+                plt.plot(baseline_final_dist)
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_min_dist.png')
+                plt.clf()
+
+                plt.plot(baseline_final_obs_cov)
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_obstacles_covered.png')
+                plt.clf()
+
+                plt.plot(baseline_final_collisions)
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_total_collisions.png')
+                plt.clf()
+
 
             # saves final episode reward for plotting training curve later
             if len(episode_rewards) > arglist.num_episodes:
-                rew_file_name = arglist.plots_dir + arglist.exp_name + '_rewards.pkl'
+                rew_file_name = arglist.att_plots_dir + arglist.exp_name + '_rewards.pkl'
 
                 with open(rew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_rewards, fp)
-                agrew_file_name = arglist.plots_dir + arglist.exp_name + '_agrewards.pkl'
+                agrew_file_name = arglist.att_plots_dir + arglist.exp_name + '_agrewards.pkl'
                 with open(agrew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_ag_rewards, fp)
 
@@ -244,6 +306,8 @@ def test(arglist):
                 print()
                 print("Average min dist: {}".format(np.mean(final_dist)))
                 print("Average number of collisions: {}".format(np.mean(final_collisions)))
+                print("Average baseline min dist: {}".format(np.mean(baseline_final_dist)))
+                print("Average baseline number of collisions: {}".format(np.mean(baseline_final_collisions)))
                 break
 
         print("Saving Transition...")
@@ -257,8 +321,7 @@ def test(arglist):
 
 
 
-def maddpg_test():
-    arglist = parse_args()
+def maddpg_test(arglist):
     test(arglist)
 
 

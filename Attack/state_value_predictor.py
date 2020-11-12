@@ -74,9 +74,9 @@ class StateValue:
 
         self.sess.run(tf.global_variables_initializer())
 
-        self.load_weight_dir = "Weights_final/"
-        self.save_weight_dir = "Weights/"
-        self.temp_weight_dir = "Weights_temp/"
+        self.load_weight_dir = "Attack/att_weights/Weights_attack_final/"
+        self.save_weight_dir = "Attack/att_weights/Weights_attack/"
+        self.temp_weight_dir = "Attack/att_weights/Weights_temp/"
 
         self.make_dirs()
 
