@@ -1,5 +1,5 @@
 from main import *
-from Attack import *
+from Attack.train import *
 import argparse
 from maddpg_implementation.experiments.train import *
 from maddpg_implementation.experiments.test import *
@@ -13,7 +13,7 @@ def parse_args():
     # Environment
     parser.add_argument("--scenario", type=str, default="simple_spread", help="name of the scenario script")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=125000, help="number of episodes")
+    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
@@ -27,15 +27,15 @@ def parse_args():
     parser.add_argument("--exp-name", type=str, default="coop_nav", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./weights_new/",
                         help="directory in which training state and model should be saved")
-    parser.add_argument("--save-rate", type=int, default=1000,
+    parser.add_argument("--save-rate", type=int, default=100,
                         help="save model once every time this many episodes are completed")
-    parser.add_argument("--load-dir", type=str, default="",
+    parser.add_argument("--load-dir", type=str, default="./Weights_final/",
                         help="directory in which training state and model are loaded")
     # Evaluation
     parser.add_argument("--restore", action="store_true", default=False)
     parser.add_argument("--display", action="store_true", default=False)
     parser.add_argument("--benchmark", action="store_true", default=False)
-    parser.add_argument("--benchmark-iters", type=int, default=100000,
+    parser.add_argument("--benchmark-iters", type=int, default=-1,
                         help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/",
                         help="directory where benchmark data is saved")
@@ -60,7 +60,9 @@ if __name__ == '__main__':
     args = parse_args()
     #run()
     #maddpg_train(args)
-    maddpg_test(args)
+    #maddpg_test(args)
+    train_attack(args)
+
 
 
 

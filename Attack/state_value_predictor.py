@@ -8,9 +8,8 @@ import os
 
 
 class DQN:
-    def __init__(self, state_size, action_size, scope='State_value', sess=None):
+    def __init__(self, state_size, scope='State_value', sess=None):
         self.state_size = state_size
-        self.action_size = action_size
         self.learning_rate = 0.001
         self.sess = sess or tf.get_default_session()
 

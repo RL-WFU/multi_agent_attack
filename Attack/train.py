@@ -11,7 +11,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 
 
-def test(arglist):
+def train(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
@@ -22,13 +22,6 @@ def test(arglist):
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
 
-        sess = tf.get_default_session()
-
-        lstm_path = 'att_weights/obsLSTMNetwork_joe'
-        state_predictor = load_lstm_model(lstm_path)
-
-        value_predictor = StateValue(54, 'State_value', sess)
-
         # Initialize
         U.initialize()
 
@@ -38,6 +31,15 @@ def test(arglist):
 
         print('Loading previous state...')
         U.load_state(arglist.load_dir+ "policy")
+
+        sess = tf.get_default_session()
+
+
+
+        lstm_path = 'Attack/att_weights/obsLSTMNetwork_joe'
+        state_predictor = load_lstm_model(lstm_path)
+
+        value_predictor = StateValue(54, 'State_value', sess)
 
 
         baseline_episode_rewards = [0.0]
@@ -79,7 +81,7 @@ def test(arglist):
         train_step = 0
         t_start = time.time()
 
-        episode_obs = np.zeros(0)
+        episode_obs = []
 
         batch_size = 32
 
@@ -97,15 +99,15 @@ def test(arglist):
 
             successor_states = []
             if len(episode_obs) > 1:
-                prev_obs = episode_obs[-2:]
-                print(prev_obs.shape)
+                prev_obs = np.reshape(np.asarray(episode_obs[-2:]), [1, 2, 55])
+                #print(prev_obs.shape)
                 for a in range(5):
-                    obs = np.concatenate((o, [1, a]), axis=1)
+                    obs = np.concatenate((o, [[a]]), axis=1)
                     obs = np.reshape(obs, [1, 1, 55])
 
                     obs = np.concatenate((prev_obs, obs), axis=1)
 
-                    print(obs.shape) #Should be [1, 3, 55]
+                    #print(obs.shape) #Should be [1, 3, 55]
 
                     successor_states.append(state_predictor.predict_on_batch(obs))  # Comes out as (1, 54)
 
@@ -132,8 +134,11 @@ def test(arglist):
                 a_n.append(np.random.choice(np.arange(len(action_n[0])), p=action_n[i]))
                 baseline_a_n.append(np.random.choice(np.arange(len(action_n[0])), p=baseline_action_n[i]))
 
+            """
             if a_n[0] == a:
                 print("Took same action")
+            """
+
 
             """
             How often should it take "bad" action during training? Try with 10, 50, 100 percent
@@ -144,8 +149,10 @@ def test(arglist):
                 a_n[0] = a
 
 
-
-            episode_obs = np.append(episode_obs, np.reshape(np.concatenate((o, [1, a_n[0]], [1, 1, 55]), axis=1)), axis=0)
+            o1 = np.concatenate((o, [[a_n[0]]]), axis=1)
+            o1 = np.reshape(o1, [1, 1, 55])
+            #episode_obs = np.append(episode_obs, o1, axis=1)
+            episode_obs.append(o1)
 
 
             #new_obs_n, rew_n, done_n, info_n = env.step(action_n)
@@ -179,7 +186,7 @@ def test(arglist):
                 baseline_agent_rewards[i][-1] += baseline_rew_n[i]
 
             if done or terminal:
-                episode_obs = np.zeros(0)
+                episode_obs = []
                 value_predictor.update_target_model()
                 obs_n = env.reset()
                 baseline_obs_n = baseline_env.reset()
@@ -289,6 +296,10 @@ def test(arglist):
                 plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_total_collisions.png')
                 plt.clf()
 
+                plt.plot(np.subtract(baseline_final_ep_rewards, final_ep_rewards))
+                plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_difference_in_rewards.png')
+                plt.clf()
+
 
             # saves final episode reward for plotting training curve later
             if len(episode_rewards) > arglist.num_episodes:
@@ -310,19 +321,20 @@ def test(arglist):
                 print("Average baseline number of collisions: {}".format(np.mean(baseline_final_collisions)))
                 break
 
-        print("Saving Transition...")
+
+        #print("Saving Transition...")
         transition = np.asarray(transition)
-        print(transition.shape)
-        np.save('Transition_new', transition)
-        print(transition[-1])
+        #print(transition.shape)
+        #np.save('Transition_new', transition)
+        #print(transition[-1])
 
         sess.close()
 
 
 
 
-def maddpg_test(arglist):
-    test(arglist)
+def train_attack(arglist):
+    train(arglist)
 
 
 def load_lstm_model(fpath):
