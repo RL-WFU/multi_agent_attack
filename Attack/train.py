@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
+import warnings
+warnings.filterwarnings("ignore")
 
 
 def train(arglist):
@@ -40,6 +42,9 @@ def train(arglist):
         state_predictor = load_lstm_model(lstm_path)
 
         value_predictor = StateValue(54, 'State_value', sess)
+
+
+        oracle_env = copy.deepcopy(env)
 
 
         baseline_episode_rewards = [0.0]
@@ -114,13 +119,23 @@ def train(arglist):
 
 
                 values = []
-                for s in successor_states:
-                    value = value_predictor.value(s, sess)
-                    values.append(value)
+                for i, s in enumerate(successor_states):
+
+                    #value = value_predictor.value(s, sess)
+                    oracle_env = copy.copy(env)
+                    test_act = action_n
+                    test_actions = []
+                    for i in range(len(trainers)):
+                        test_actions.append(np.random.choice(np.arange(len(action_n[0])), p=test_act[i]))
+
+                    test_actions[0] = i
+                    _, _, val, _ = oracle_env.step(test_actions)
+                    values.append(np.mean(val))
+
 
                 values = np.asarray(values)
                 values = np.reshape(values, len(successor_states))
-                a = np.argmax(values, axis=0)
+                a = np.argmin(values, axis=0)
 
 
 
@@ -171,7 +186,7 @@ def train(arglist):
             o_next = np.asarray(new_obs_n)
             o_next = np.reshape(o_next, [1, 54])
 
-            value_predictor.memorize(o, a_n[1], a_n[2], -rew_n[0], o_next, done or terminal)
+            #value_predictor.memorize(o, a_n[1], a_n[2], -rew_n[0], o_next, done or terminal)
 
             transition.append((o, a_n[0], a_n[1], a_n[2], o_next))
 
@@ -187,7 +202,7 @@ def train(arglist):
 
             if done or terminal:
                 episode_obs = []
-                value_predictor.update_target_model()
+                #value_predictor.update_target_model()
                 obs_n = env.reset()
                 baseline_obs_n = baseline_env.reset()
                 episode_step = 0
@@ -203,8 +218,8 @@ def train(arglist):
             train_step += 1
 
 
-            if train_step > batch_size and train_step % 100 == 0:
-                value_predictor.replay(batch_size)
+            #if train_step > batch_size and train_step % 100 == 0:
+                #value_predictor.replay(batch_size)
 
             # for benchmarking learned policies
             if arglist.benchmark:
@@ -234,16 +249,19 @@ def train(arglist):
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
 
 
-                value_predictor.save("_model", "_target")
+                #value_predictor.save("_model", "_target")
 
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:
                     print("steps: {}, episodes: {}, mean episode reward: {}, difference in reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), np.mean(episode_rewards[-arglist.save_rate:]) - np.mean(baseline_episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
+
                 else:
+
                     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
                         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
                         [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards], round(time.time()-t_start, 3)))
+
                 t_start = time.time()
                 # Keep track of final episode reward
                 final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
@@ -253,6 +271,7 @@ def train(arglist):
 
                 for rew in baseline_agent_rewards:
                     baseline_final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
+
 
                 final_collisions.append(np.mean(t_collisions[-arglist.save_rate:]))
                 final_dist.append(np.mean(min_dist[-arglist.save_rate:]))
@@ -296,6 +315,7 @@ def train(arglist):
                 plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_baseline_total_collisions.png')
                 plt.clf()
 
+
                 plt.plot(np.subtract(baseline_final_ep_rewards, final_ep_rewards))
                 plt.savefig(arglist.att_plots_dir + arglist.exp_name + '_difference_in_rewards.png')
                 plt.clf()
@@ -325,7 +345,7 @@ def train(arglist):
         #print("Saving Transition...")
         transition = np.asarray(transition)
         #print(transition.shape)
-        #np.save('Transition_new', transition)
+        np.save('Transition_Adversarial', transition)
         #print(transition[-1])
 
         sess.close()

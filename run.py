@@ -6,6 +6,7 @@ from maddpg_implementation.experiments.test import *
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
+import copy
 
 
 def parse_args():
@@ -27,7 +28,7 @@ def parse_args():
     parser.add_argument("--exp-name", type=str, default="coop_nav", help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./weights_new/",
                         help="directory in which training state and model should be saved")
-    parser.add_argument("--save-rate", type=int, default=100,
+    parser.add_argument("--save-rate", type=int, default=1000,
                         help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="./Weights_final/",
                         help="directory in which training state and model are loaded")
@@ -54,14 +55,31 @@ def parse_args():
 
 
 
+class test:
+    def __init__(self):
+        self.x = 1
+        self.y = 2
+
+    def setX(self):
+        self.x = 3
 
 if __name__ == '__main__':
 
     args = parse_args()
     #run()
-    #maddpg_train(args)
-    #maddpg_test(args)
-    train_attack(args)
+    #maddpg_train(args) #TRAIN scenario USING MADDPG
+    #maddpg_test(args) #TEST scenario USING FROZEN WEIGHTS
+    #train_attack(args) #TRAIN THE ATTACK NETWORK (WORK IN PROGRESS) - OUTDATED
+    a = [1, 2, 3]
+    print(a[1:])
+
+
+
+
+
+
+
+
 
 
 

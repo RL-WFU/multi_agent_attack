@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import maddpg_implementation.maddpg.common.tf_util as U
 from maddpg_implementation.maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
+import joblib
 
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -94,6 +95,10 @@ def test(arglist):
         train_step = 0
         t_start = time.time()
 
+        paths = []
+        path_dict = []
+        running_paths = [None]
+
         print('Starting iterations...')
         while True:
             # get action
@@ -123,6 +128,39 @@ def test(arglist):
 
             transition.append((o, a_n[0], a_n[1], a_n[2], o_next))
 
+            o1 = np.asarray(obs_n[0])
+            o1 = np.reshape(o1, [18,])
+
+            a1 = np.asarray([a_n[0]])
+
+            rew1 = np.asarray([rew_n[0]])
+
+            info1 = np.asarray([info_n['n'][0]])
+
+
+            if running_paths[0] is None:
+                running_paths[0] = dict(
+                    observations=[],
+                    actions=[],
+                    rewards=[],
+                    env_infos=[],
+                    agent_infos=[],
+                    returns=[],
+                )
+
+            running_paths[0]["observations"].append(o1)
+            running_paths[0]["actions"].append(a1)
+            running_paths[0]["rewards"].append(rew1)
+            running_paths[0]["env_infos"].append(info1)
+            running_paths[0]["agent_infos"].append(info1)
+            running_paths[0]["returns"].append(0) #THIS IS FILLER. VALUE SHOULD NOT MATTER
+
+
+
+
+
+
+
             obs_n = new_obs_n
 
             for i, rew in enumerate(rew_n):
@@ -130,6 +168,22 @@ def test(arglist):
                 agent_rewards[i][-1] += rew
 
             if done or terminal:
+
+                paths.append(dict(observations=running_paths[0]["observations"],
+                                  actions=running_paths[0]["actions"],
+                                  rewards=running_paths[0]["rewards"],
+                                  env_infos=running_paths[0]["env_infos"],
+                                  agent_infos=running_paths[0]["agent_infos"],
+                                  returns=running_paths[0]["returns"],
+                                  ))
+
+                running_paths[0] = None
+
+                if len(paths) % 10 == 0 and len(paths) > 1:
+                    path_dict.append(dict(paths=paths[-10:]))
+                    joblib.dump(path_dict[-1], 'coop_nav/itr_' + str(len(path_dict)-1) + '.pkl')
+
+
                 obs_n = env.reset()
                 episode_step = 0
                 episode_rewards.append(0)
